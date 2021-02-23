@@ -1,87 +1,72 @@
 using VectorizationBase: ifelse, AbstractSIMD
 """
     two_sum(a, b)
-Computes `hi = fl(a+b)` and `lo = err(a+b)`, using the algorithm by D. E. Knuth,
-"The Art of Computer Programming: Seminumerical Algorithms", 1969.
-This algorithm does not use any branch. See also `fast_two_sum` for an
-alternative algorithm which branches but does fewer arithmetic operations.
+Computes `hi = fl(a+b)` and `lo = err(a+b)`.
 """
-@inline function two_sum(a::T, b::T) where {T}
-    @fastmath  hi = a + b
+@inline function two_sum(a::T, b::T) where {T<:Real}
+    hi = a + b
     v  = hi - a
     lo = (a - (hi - v)) + (b - v)
     return hi, lo
 end
 
 """
-    fast_two_sum(a, b)
-Computes `hi = fl(a+b)` and `lo = err(a+b)`, using the algorithm by
-T. J. Dekker, "A Floating-Point Technique for Extending the Available
-Precision", 1971
-Despite its name, this algorithm may not be as fast as expected on all hardware
-architectures because it branches. See also `two_sum` for an alternative
-algorithm which performs more arithmetic operations, but does not branch.
+    one_sum(a, b)
+Computes `fl(a+b)`.
 """
-@inline function fast_two_sum(a::T, b::T) where T <: Real
-    x = a + b
-
-    if abs(a) < abs(b)
-        (a_,b_) = (b,a)
-    else
-        (a_,b_) = (a,b)
-    end
-
-    z = x - a_
-    e = b_ - z
-
-    x, e
+@inline function one_sum(a::T, b::T) where {T<:Real}
+    return a + b
 end
-
-@inline function fast_two_sum(a::T, b::T) where T <: AbstractSIMD
-    x = a + b
-
-    t = abs(a) < abs(b)
-    a_ = ifelse(t, b, a)
-    b_ = ifelse(t, a, b)
-
-    z = x - a_
-    e = b_ - z
-
-    x, e
-end
-
-
-
 
 """
    three_sum(a, b, c)
+    
 Computes `hi = fl(a+b+c)` and `md = err(a+b+c), lo = err(md)`.
 """
-function three_sum(a::T,b::T,c::T) where {T}
-    s, t   = two_sum(b, c)
-    hi, u  = two_sum(a, s)
-    md, lo = two_sum(u, t)
+function three_sum(a::T, b::T, c::T) where {T}
+    md, lo = two_sum(b, c) 
+    hi, md = two_sum(a, md)
+    md, lo = two_sum(md, lo)
+    hi, md = two_hilo_sum(hi, md)
+    md, lo = two_hilo_sum(md, lo)
     hi, md = two_hilo_sum(hi, md)
     return hi, md, lo
 end
 
 """
     two_sum(a, b, c)
+    
 Computes `hi = fl(a+b+c)` and `lo = err(a+b+c)`.
 """
-function two_sum(a::T,b::T,c::T) where {T}
-    s, t   = two_sum(b, c)
-    hi, u  = two_sum(a, s)
-    lo     = u + t
-    hi, lo = two_hilo_sum(hi, lo)
-    return hi, lo
+@inline function two_sum(a::T, b::T, c::T) where {T}
+    md, lo = two_sum(b, c) 
+    hi, md = two_sum(a, md)
+    md, lo = two_sum(md, lo)
+    hi, md = two_hilo_sum(hi, md)
+    md = md + lo
+    hi, md = two_hilo_sum(hi, md)
+    return hi, md
+end
+
+"""
+    one_sum(a, b, c)
+    
+Computes `fl(a+b+c)`
+"""
+@inline function one_sum(a::T,b::T,c::T) where {T}
+    md, lo = two_sum(b, c) 
+    hi, md = two_sum(a, md)
+    md, lo = two_sum(md, lo)
+    hi, md = two_hilo_sum(hi, md)
+    md = md + lo
+    hi = hi + md
+    return hi
 end
 
 """
     four_sum(a, b, c, d)
     
-Computes `s1 = fl(a+b+c+d)` and `s2 = err(a+b+c+d),  s3 = err(himd), s4 = err(lomd)`.
-- Unchecked Precondition: !(isinf(a) | isinf(b) | isinf(c) | isinf(d))
+Computes `hi = fl(a+b+c+d)` and `hm = err(a+b+c+d), ml = err(hm), lo = err(ml)`.
 """
 function four_sum(a::T,b::T,c::T,d::T) where {T}
     t0, t1 = two_sum(a,  b)
@@ -98,34 +83,99 @@ end
 
 """
     three_sum(a, b, c, d)
+    
 Computes `hi = fl(a+b+c+d)` and `md = err(a+b+c+d), lo = err(md)`.
 """
 function three_sum(a::T,b::T,c::T,d::T) where {T}
-    t0, t1 = two_sum(a ,  b)
-    t0, t2 = two_sum(t0,  c)
-    hi, t3 = two_sum(t0,  d)
-    t0, t1 = two_sum(t1, t2)
-    hm, t2 = two_sum(t0, t3) # here, t0 >= t3
-    ml     = t1 + t2
-    return hi, hm, ml
+    t0, t1 = two_sum(a,  b)
+    t2, t3 = two_sum(c,  d)
+    hi, t4 = two_sum(t0, t2)
+    t5, t6 = two_sum(t1, t3)
+    md, lo = two_sum(t4, t5)
+    lo = lo + t6
+    md, lo = two_hilo_sum(md, lo)
+    hi, md = two_hilo_sum(hi, md)
+    return hi, md, lo
 end
 
 """
     two_sum(a, b, c, d)
+    
 Computes `hi = fl(a+b+c+d)` and `lo = err(a+b+c+d)`.
 """
 function two_sum(a::T,b::T,c::T,d::T) where {T}
-    t0, t1 = two_sum(a ,  b)
-    t0, t2 = two_sum(t0,  c)
-    hi, t3 = two_sum(t0,  d)
-    t0, t1 = two_sum(t1, t2)
-    lo     = t0 + t3
+    t0, t1 = two_sum(a,  b)
+    t2, t3 = two_sum(c,  d)
+    hi, t4 = two_sum(t0, t2)
+    t5, t6 = two_sum(t1, t3)
+    lo, t7 = two_sum(t4, t5)
+    t7 = t7 + t6
+    lo, t7 = two_hilo_sum(lo, t7)
+    hi, lo = two_hilo_sum(hi, lo)
     return hi, lo
 end
 
 """
+    one_sum(a, b, c, d)
+    
+Computes `fl(a+b+c+d)`.
+"""
+function one_sum(a::T,b::T,c::T,d::T) where {T}
+    t0, t1 = two_sum(a,  b)
+    t2, t3 = two_sum(c,  d)
+    hi, t4 = two_sum(t0, t2)
+    t5, t6 = two_sum(t1, t3)
+    lo, t7 = two_sum(t4, t5)
+    t7 = t7 + t6
+    lo, t7 = two_hilo_sum(lo, t7)
+    hi = hi + lo
+    return hi
+end
+
+
+
+function vec_sum(x0::T, x1::T, x2::T, x3::T) where {T}
+    s3 = x3
+    s2, e3 = two_sum(x2, s3)
+    s1, e2 = two_sum(x1, s2)
+    s0, e1 = two_sum(x0, s1)
+    return s0,e1,e2,e3
+end
+
+function vsum_errbranch(x::NTuple{4,T}) where {T}
+    y = zeros(T, 4)
+    r = zeros(T, 4)
+    e = zeros(T, 4)
+    j = 1
+    e[1] = x[1]
+    for i = 1:2
+        r[i], t = two_sum(e[i], x[i+1])
+        if t !== zero(T)
+            y[j] = r[i]
+            e[i+1] = t
+            j += 1
+        else    
+            e[i+1] = r[i]
+        end    
+    end
+    y[j], y[j+1] = two_sum(e[3], x[4])
+    return y
+end
+
+function foursum(x1::T, x2::T, x3::T, x4::T) where {T}
+    a1, a2 = two_sum(x1, x2)
+    b1, b2 = two_sum(x3, x4)
+    c1, c2 = two_sum(a1, b1)
+    d1, d2 = two_sum(a2, b2)
+    e1to4 = vec_sum(c1,c2,d1,d2)
+    y = vsum_errbranch(e1to4)
+    return (y...,)
+end
+
+"""
     five_sum(a, b, c, d, e)
-Computes `s = fl(a+b+c+d+e)` and
+    
+Computes `s = fl(a+b+c+d+e)` and 
     `e1 = err(a+b+c+d), e2 = err(e1), e3 = err(e2), e4 = err(e3)`.
 """
 function five_sum(v::T, w::T, x::T, y::T, z::T) where {T}
@@ -153,8 +203,10 @@ Computes `s = fl(a-b)` and `e = err(a-b)`.
     lo = (a - a1) - (b + b1)
     return hi, lo
 end
+
 """
     three_diff(a, b, c)
+    
 Computes `s = fl(a-b-c)` and `e1 = err(a-b-c), e2 = err(e1)`.
 """
 function three_diff(a::T,b::T,c::T) where {T}
@@ -167,6 +219,7 @@ end
 
 """
     four_diff(a, b, c, d)
+    
 Computes `hi = fl(a-b-c-d)` and `hm = err(a-b-c-d), ml = err(hm), lo = err(ml)`.
 """
 function four_diff(a::T,b::T,c::T,d::T) where {T}
@@ -180,37 +233,59 @@ function four_diff(a::T,b::T,c::T,d::T) where {T}
 end
 
 """
-    two_square(a)
-Computes `s = fl(a*a)` and `e = err(a*a)`.
-"""
-@inline function two_square(a::T) where {T}
-    p = a * a
-    e = fma(a, a, -p)
-    p, e
-end
-
-
-"""
     two_prod(a, b)
-Computes `s = fl(a*b)` and `e = err(a*b)`.
+Computes `hi = fl(a*b)` and `lo = fl(err(a*b))`.
 """
 @inline function two_prod(a::T, b::T) where {T}
-    p = a * b
-    e = fma(a, b, -p)
-    p, e
+    hi = a * b
+    lo = fma(a, b, -hi)
+    hi, lo
 end
 
+#=
+assumes no underflow in four_prod
+"""
+    three_prod(a, b, c)
+    
+Computes `hi = fl(a*b*c)` and `md = err(a*b*c), lo = err(md)`.
+"""
+@inline function three_prod(a::T, b::T, c::T) where {T}
+    hi, himd, lomd, lo = four_prod(a, b, c)
+    himd, lomd = two_hilo_sum(himd, lomd)
+    lomd = lomd + lo
+    return hi, himd, lomd
+end
+=#
 
 """
     three_prod(a, b, c)
+    
 Computes `hi = fl(a*b*c)` and `md = err(a*b*c), lo = err(md)`.
 """
 function three_prod(a::T, b::T, c::T) where {T}
+    a, b = maxmin(a,b)
+    a, c = maxmin(a,c)
+    b, c = maxmin(b,c)
     abhi, ablo = two_prod(a, b)
     hi, abhiclo = two_prod(abhi, c)
     ablochi, abloclo = two_prod(ablo, c)
     md, lo, tmp  = three_sum(ablochi, abhiclo, abloclo)
+    hi, md = two_sum(hi, md)
     return hi, md, lo
+end
+
+@inline maxmin(a,b) = abs(a) < abs(b) ? (b,a) : (a,b)
+
+"""
+    four_prod(a, b, c)
+    
+Computes `hi = fl(a*b*c)` and `himd = err(a*b*c), lomd = err(himd), lo = err(lomd)`.
+"""
+@inline function four_prod(a::T, b::T, c::T) where {T}
+    thi, tlo = two_prod(b, c)
+    hihi, hilo = two_prod(a, thi)
+    lohi, lolo = two_prod(a, tlo)
+    return hihi, hilo, lohi, lolo
 end
 
 #=
@@ -221,19 +296,42 @@ end
 
 """
    three_fma(a, b, c)
-Computes `s = fl(fma(a,b,c))` and `e1 = err(fma(a,b,c)), e2 = err(e1)`.
+Computes `hi = fl(fma(a,b,c))` and `md = fl(err(fma(a,b,c))), lo = fl(err(md))`.
 """
 function three_fma(a::T, b::T, c::T) where {T}
-     x = fma(a, b, c)
-     y, z = two_prod(a, b)
-     t, z = two_sum(c, z)
-     t, u = two_sum(y, t)
-     y = ((t - x) + u)
-     y, z = two_hilo_sum(y, z)
-     return x, y, z
+     hi = fma(a, b, c) 
+     hi0, lo0 = two_prod(a, b)
+     hi1, lo1 = two_sum(c, lo0)
+     hi2, lo2 = two_sum(hi0, hi1)
+     y = ((hi2 - hi) + lo2)
+     md, lo = two_hilo_sum(y, lo1)
+     return hi, md, lo
 end
 
+"""
+   two_fma(a, b, c)
+Computes `hi = fl(fma(a,b,c))` and `lo = fl(err(fma(a,b,c)))`.
+"""
+function two_fma(a::T, b::T, c::T) where {T}
+     hi = fma(a, b, c) 
+     hi0, lo0 = two_prod(a, b)
+     hi1, lo1 = two_sum(c, lo0)
+     hi2, lo2 = two_sum(hi0, hi1)
+     lo2 += lo1
+     lo = (hi2 - hi) + lo2
+     return hi, lo
+end
 
+"""
+   two_muladd(a, b, c)
+Computes `hi = fl(muladd(a,b,c))` and `lo = fl(err(muladd(a,b,c)))`.
+"""
+function two_muladd(a::T, b::T, c::T) where {T}
+     hi = fma(a, b, c)
+     c_minus_hi = c - hi
+     lo = muladd(a, b, c_minus_hi)
+     return hi, lo
+end    
 
 # with arguments sorted by magnitude
 
@@ -250,6 +348,7 @@ end
 
 """
     two_hilo_diff(a, b)
+    
 *unchecked* requirement `|a| ≥ |b|`
 Computes `hi = fl(a-b)` and `lo = err(a-b)`.
 """
@@ -261,32 +360,35 @@ end
 
 """
     three_hilo_sum(a, b, c)
+    
 *unchecked* requirement `|a| ≥ |b| ≥ |c|`
 Computes `x = fl(a+b+c)` and `y = err(a+b+c), z = err(y)`.
 """
-function three_hilo_sum(a::T,b::T,c::T) where {T}
-    s, t = two_hilo_sum(b, c)
-    x, u = two_hilo_sum(a, s)
-    y, z = two_hilo_sum(u, t)
-    x, y = two_hilo_sum(x, y)
-    return x, y, z
+function three_hilo_sum(a::T, b::T, c::T) where {T}
+    md, lo = two_hilo_sum(b, c)
+    hi, md = two_sum(a, md)
+    md, lo = two_hilo_sum(md, lo)
+    hi, md = two_hilo_sum(hi, md)
+    return hi,md,lo
 end
 
 """
     three_hilo_diff(a, b, c)
+    
 *unchecked* requirement `|a| ≥ |b| ≥ |c|`
 Computes `x = fl(a-b-c)` and `y = err(a-b-c), z = err(y)`.
 """
 function three_hilo_diff(a::T,b::T,c::T) where {T}
-    s, t = two_hilo_diff(b, -c)
-    x, u = two_hilo_sum(a, s)
-    y, z = two_hilo_sum(u, t)
-    x, y = two_hilo_sum(x, y)
-    return x, y, z
+    md, lo = two_hilo_sum(-b, -c)
+    hi, md = two_sum(a, md)
+    md, lo = two_hilo_sum(md, lo)
+    hi, md = two_hilo_sum(hi, md)
+    return hi,md,lo 
 end
 
 """
     four_hilo_sum(a, b, c, d)
+    
 *unchecked* requirement `|a| ≥ |b| ≥ |c| ≥ |d|`
 Computes `hi = fl(a+b+c+d)` and `hm = err(a+b+c+d), ml = err(hm), lo = err(ml)`.
 """
@@ -299,8 +401,10 @@ function four_hilo_sum(a::T,b::T,c::T,d::T) where {T}
     ml, lo = two_hilo_sum(t1, t2)
     return hi, hm, ml, lo
 end
+
 """
     four_hilo_diff(a, b, c, d)
+    
 *unchecked* requirement `|a| ≥ |b| ≥ |c| ≥ |d|`
 Computes `hi = fl(a-b-c-d)` and `hm = err(a-b-c-d), ml = err(hm), lo = err(ml)`.
 """
